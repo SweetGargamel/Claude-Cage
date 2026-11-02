@@ -34,12 +34,7 @@ jobs:
         with:
           dotnet-version: 10.0.403
       - name: Install packaging tool
-        run: |
-          $zip = "$env:RUNNER_TEMP/nsis-3.13.zip"
-          Invoke-WebRequest 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip' -OutFile $zip
-          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne 'ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8') { throw 'NSIS checksum mismatch.' }
-          Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
-          Add-Content $env:GITHUB_PATH "$env:RUNNER_TEMP/nsis-3.13"
+        run: ./scripts/install-nsis.ps1
       - name: Retrieve reviewed corresponding sources
         env:
           SOURCE_URL: ${{ inputs.qemu_source_url }}
