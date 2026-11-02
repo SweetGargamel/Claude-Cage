@@ -59,17 +59,30 @@ function Get-VerifiedGitArchive {
         $partial = "$archive.partial"
         try {
             Invoke-BuildTool $git @('init', '--bare', '--quiet', $checkout)
-            Invoke-BuildTool $git @('--git-dir', $checkout, 'fetch', '--depth=1', $Dependency.repository, $Dependency.commit)
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+                try {
+                    Invoke-BuildTool $git @('--git-dir', $checkout, 'fetch', '--depth=1', $Dependency.repository, $Dependency.commit)
+                    break
+                } catch {
+                    if ($attempt -eq 3) { throw }
+                    Write-Warning "Source fetch attempt $attempt of 3 failed; retrying."
+                    Start-Sleep -Seconds 5
+                }
+            }
             $actualCommit = & $git '--git-dir' $checkout 'rev-parse' 'FETCH_HEAD'
             if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $Dependency.commit) { throw 'Fetched source commit does not match the pinned QEMU build.' }
-            Invoke-BuildTool $git @('--git-dir', $checkout, 'archive', '--format=tar', "--prefix=$($Dependency.prefix)", "--output=$partial", $Dependency.commit)
+            # Preserve the pinned archive bytes across Git for Windows and POSIX hosts.
+            Invoke-BuildTool $git @('--git-dir', $checkout, '-c', 'core.autocrlf=false', '-c', 'tar.umask=0002', 'archive', '--format=tar', "--prefix=$($Dependency.prefix)", "--output=$partial", $Dependency.commit)
+            $actualHash = (Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actualHash -ne $Dependency.hash) { throw "Source archive checksum mismatch: $($Dependency.file); expected $($Dependency.hash), actual $actualHash" }
             Move-Item -LiteralPath $partial -Destination $archive
         } finally {
             Remove-Item -LiteralPath $checkout -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
         }
     }
-    if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $Dependency.hash) { throw "Source archive checksum mismatch: $($Dependency.file)" }
+    $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $Dependency.hash) { throw "Source archive checksum mismatch: $($Dependency.file); expected $($Dependency.hash), actual $actualHash. Remove the cached file and retry." }
     return $archive
 }
 
