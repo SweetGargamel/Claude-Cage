@@ -58,7 +58,7 @@ Windows 快捷键以 `Ctrl` 为主：`Ctrl+O` 打开项目、`Ctrl+T` 新建网�
 
 ## 维护者构建与验收
 
-构建使用 PowerShell 7、Go（遵循 `go.mod`）、Node.js、.NET 10 SDK、7-Zip 和 NSIS。依赖版本、下载地址及哈希固定在 `packaging/windows/dependencies.json`；构建时逐个校验。源码默认版本来自根目录 `VERSION`。
+构建使用 PowerShell 7、Go（遵循 `go.mod`）、Node.js、uv、.NET 10 SDK、7-Zip 和 NSIS。uv 用于执行前端 noVNC 的 Python 补丁脚本。依赖版本、下载地址及哈希固定在 `packaging/windows/dependencies.json`；构建时逐个校验。源码默认版本来自根目录 `VERSION`。
 
 ```powershell
 pwsh -File scripts/build-windows.ps1
