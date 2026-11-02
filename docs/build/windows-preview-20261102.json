@@ -12,5 +12,6 @@
   "testedSystem": "Windows 11 Pro 24H2 x64 build 26100",
   "windows10Tested": false,
   "automaticUpdate": false,
-  "notes": "Source inputs match the tested installer; release documentation and workflow guards are added to the publication snapshot."
+  "notes": "The separate source archive preserves the tested build inputs. This release tag also includes CI and native Windows packaging fixes; the published installer is unchanged.",
+  "asBuiltSourceCommit": "810893a62766221ca56cf9418cb6dc1ff3458e63"
 }

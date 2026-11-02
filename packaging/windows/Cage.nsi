@@ -139,7 +139,11 @@ Section "Cage" Main
   CreateDirectory "$StageDir"
   SetOutPath "$StageDir"
   ClearErrors
+!ifdef NSIS_WIN32_MAKENSIS
+  File /r "${APP_DIR}\*"
+!else
   File /r "${APP_DIR}/*"
+!endif
   WriteUninstaller "$StageDir\Uninstall.exe"
   ${If} ${Errors}
     SetOutPath "$TEMP"
