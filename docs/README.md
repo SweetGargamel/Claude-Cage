@@ -8,6 +8,7 @@
 |---|---|
 | 安装、配置代理、打开第一个项目 | [开始使用](getting-started.md) |
 | 查看快捷键、文件保存、关闭与退出行为 | [日常使用](getting-started.md#日常使用) |
+| 在 Windows 上安装、使用和更新 | [Windows 支持](windows.md) |
 | 升级应用、更新环境工具或卸载 | [升级与卸载](getting-started.md#升级与卸载) |
 | 查看首个内测版本的能力与验收范围 | [0.1.0-alpha.1 发行说明](releases/0.1.0-alpha.1.md) |
 | 排查下载、启动、联网与授权问题 | [常见问题与恢复](troubleshooting.md) |
@@ -22,6 +23,7 @@
 | 理解网络检查、暂停与恢复 | [网络检查设计](design/network-checks.md) |
 | 理解节点配置、代理核心与凭据归属 | [内置代理设计](design/managed-proxy.md) |
 | 构建签名、公证的 macOS 安装包 | [发布 macOS 安装包](releasing.md) |
+| 构建 Windows 安装包与执行平台验收 | [Windows 构建与验收](windows.md#维护者构建与验收) |
 | 发布 Release、验证公开附件与部署主页 | [公开发行与主页部署](public-releases.md) |
 
 ## 上游与许可

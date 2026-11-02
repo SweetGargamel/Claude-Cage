@@ -65,7 +65,7 @@ func Run(args []string) bool {
 		dns.Names, dns.Answered = policy.Name, policy.Answered
 	}
 	if path := os.Getenv(cage.ConfigEnv); path != "" {
-		stopJobWatch, err = cage.WatchJobStop(filepath.Dir(path), os.Getenv(cage.JobEnv), func() { _ = osutil.SysKill(os.Getpid(), osutil.SigInt) })
+		stopJobWatch, err = cage.WatchJobStop(filepath.Dir(path), os.Getenv(cage.JobEnv), notifyHostagentStop)
 		if err != nil {
 			logrus.Fatal(err)
 		}

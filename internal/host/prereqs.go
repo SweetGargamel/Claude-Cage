@@ -121,17 +121,25 @@ func inGroup(name string) bool {
 	return err == nil && slices.Contains(ids, g.Gid)
 }
 
-// WindowsPrereqs checks for QEMU, which Lima runs on Windows. Whether the
-// "Windows Hypervisor Platform" feature is on cannot be read without
-// administrator rights: a host without it fails at the first start, where
-// WindowsStartHint explains it. winget's QEMU does not add itself to PATH:
+// WindowsPrereqs checks for QEMU and queries the Windows Hypervisor Platform
+// capability without elevation.
+// winget's QEMU does not add itself to PATH:
 // its default folder goes on PATH for this process. True elsewhere.
 func WindowsPrereqs(out, w io.Writer) bool {
 	if runtime.GOOS != "windows" {
 		return true
 	}
+	if err := ConfigureWindowsRuntime(); err != nil {
+		fmt.Fprintln(w, err)
+		return false
+	}
+	if err := windowsHypervisorReady(); err != nil {
+		fmt.Fprintln(w, err)
+		return false
+	}
 	bin, _ := qemuBinary()
-	if _, err := exec.LookPath(bin); err == nil {
+	_, imageErr := exec.LookPath("qemu-img")
+	if _, err := exec.LookPath(bin); err == nil && imageErr == nil {
 		return true
 	}
 	dir := os.Getenv("AGENT_VM_QEMU_DIR")
@@ -139,8 +147,10 @@ func WindowsPrereqs(out, w io.Writer) bool {
 		dir = `C:\Program Files\qemu`
 	}
 	if _, err := os.Stat(filepath.Join(dir, bin+".exe")); err == nil {
-		os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-		return true
+		if _, err := os.Stat(filepath.Join(dir, "qemu-img.exe")); err == nil {
+			os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			return true
+		}
 	}
 	fmt.Fprintf(w, "Error: Lima needs '%s' on PATH (not found).\n  Install QEMU with: winget install -e --id SoftwareFreedomConservancy.QEMU\n  QEMU also needs the 'Windows Hypervisor Platform' Windows feature (see 'agent-vm doctor').\n", bin)
 	return false

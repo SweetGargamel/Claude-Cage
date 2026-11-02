@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 )
 
 type runningProfile struct {
@@ -64,12 +63,7 @@ func (c Config) CheckRunning(state string) error {
 		if r.PID < 1 {
 			continue
 		}
-		p, err := os.FindProcess(r.PID)
-		if err != nil {
-			continue
-		}
-		alive := p.Signal(syscall.Signal(0)) == nil
-		p.Release()
+		alive := profileProcessAlive(r.PID)
 		if alive && r.Fingerprint != c.Fingerprint() {
 			return fmt.Errorf("cage configuration changed while a VM is running; run cage stop before restarting")
 		}

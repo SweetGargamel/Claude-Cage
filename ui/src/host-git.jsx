@@ -71,7 +71,7 @@ export function HostGitPreparation({ onClose, onReady }) {
               <>
                 <p>
                   Claude 可以修改共享文件。启用这项保护后，本机 Git
-                  会忽略未经你明确指定的裸仓库，避免共享目录里的配置在 Mac
+                  会忽略未经你明确指定的裸仓库，避免共享目录里的配置在本机
                   上执行命令。
                 </p>
                 <p>

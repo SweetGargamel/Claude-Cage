@@ -1,0 +1,86 @@
+name: Prepare signed Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      qemu_source_url:
+        description: 'HTTPS URL of the reviewed archive with corresponding patched QEMU and bundled-library sources'
+        required: true
+        type: string
+      qemu_source_sha256:
+        description: 'SHA-256 of the reviewed source archive'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-2025
+    environment: windows-release
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.403
+      - name: Install packaging tool
+        run: |
+          $zip = "$env:RUNNER_TEMP/nsis-3.13.zip"
+          Invoke-WebRequest 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip' -OutFile $zip
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne 'ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8') { throw 'NSIS checksum mismatch.' }
+          Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+          Add-Content $env:GITHUB_PATH "$env:RUNNER_TEMP/nsis-3.13"
+      - name: Retrieve reviewed corresponding sources
+        env:
+          SOURCE_URL: ${{ inputs.qemu_source_url }}
+          SOURCE_SHA256: ${{ inputs.qemu_source_sha256 }}
+        run: |
+          if ($env:SOURCE_URL -notlike 'https://*' -or $env:SOURCE_SHA256 -notmatch '^[0-9A-Fa-f]{64}$') { throw 'Invalid source URL or SHA-256.' }
+          Invoke-WebRequest -Uri $env:SOURCE_URL -OutFile "$env:RUNNER_TEMP/qemu-windows-source.zip" -TimeoutSec 600 -MaximumRedirection 5
+          if ((Get-FileHash "$env:RUNNER_TEMP/qemu-windows-source.zip" -Algorithm SHA256).Hash -ne $env:SOURCE_SHA256) { throw 'Corresponding-source archive checksum mismatch.' }
+      - name: Build, sign and package
+        env:
+          CAGE_WINDOWS_PFX_BASE64: ${{ secrets.CAGE_WINDOWS_PFX_BASE64 }}
+          CAGE_WINDOWS_PFX_PASSWORD: ${{ secrets.CAGE_WINDOWS_PFX_PASSWORD }}
+        run: |
+          if (-not $env:CAGE_WINDOWS_PFX_BASE64) { throw 'Configure a trusted code-signing PFX in the windows-release environment.' }
+          $pfx = "$env:RUNNER_TEMP/cage-signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CAGE_WINDOWS_PFX_BASE64))
+          $password = ConvertTo-SecureString $env:CAGE_WINDOWS_PFX_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          try {
+            $env:CAGE_WINDOWS_CERT_SHA1 = $certificate.Thumbprint
+            ./scripts/build-windows.ps1 -Release
+            go test ./internal/workbench ./internal/appupdate ./internal/host ./internal/managedproxy
+            if ($LASTEXITCODE -ne 0) { throw 'Windows runtime checks failed.' }
+            dotnet run --project desktop/windows.tests/Cage.Windows.Tests.csproj
+            if ($LASTEXITCODE -ne 0) { throw 'Native updater policy tests failed.' }
+            go test ./internal/cage -run 'Test(Gate|ProxyRevision|ConfigChange|JobStop|CONNECT|SOCKS|DNS|RejectHostLAN|Credentials|ProxyHostname|SafetyReport|Renew)'
+            if ($LASTEXITCODE -ne 0) { throw 'Cage proxy and safety tests failed.' }
+            go test ./internal/vm -run 'Test(NetworkConfined|WindowsQEMUIdentity)'
+            if ($LASTEXITCODE -ne 0) { throw 'Windows VM confinement tests failed.' }
+            go test github.com/lima-vm/lima/v2/pkg/networks/usernet -run TestNetstackWindowsNativeSocketPaths
+            if ($LASTEXITCODE -ne 0) { throw 'Windows native usernet tests failed.' }
+            ./scripts/package-windows.ps1 -Release -SkipBuild -QemuSourceArchive "$env:RUNNER_TEMP/qemu-windows-source.zip"
+            $version = (Get-Content VERSION -Raw).Trim()
+            ./scripts/test-windows-install.ps1 -Installer "$PWD/_output/releases/$version/windows/Cage-$version-windows-amd64-setup.exe"
+          } finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+            if ($certificate) { Remove-Item "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cage-windows-signed-release-candidate
+          path: _output/releases/*/windows/*
+          retention-days: 14
+      # Publishing remains a separate action after Windows 10/11 WHPX acceptance.

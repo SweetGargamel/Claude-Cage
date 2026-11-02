@@ -16,10 +16,23 @@ validate_ticket() {
 shopt -s nullglob
 archives=("$directory"/Cage-*-macos-arm64.dmg)
 if [[ ${#archives[@]} != 1 ]]; then echo 'Expected exactly one Cage DMG.' >&2; exit 1; fi
+sources=("$directory"/mihomo-v*-source.tar.gz)
+if [[ ${#sources[@]} != 1 ]]; then echo 'Expected exactly one Mihomo source archive.' >&2; exit 1; fi
 archive="${archives[0]}"
 version="${archive##*/Cage-}"
 version="${version%-macos-arm64.dmg}"
-(cd "$directory" && shasum -a 256 --check SHA256SUMS)
+# The release may also contain Windows installers and their corresponding
+# sources. Validate this platform's downloaded files against the original list.
+checksum_input="$(mktemp)"
+trap 'rm -f "$checksum_input"' EXIT
+awk -v archive="${archive##*/}" -v source="${sources[0]##*/}" '
+  NF == 2 && ($2 == archive || $2 == "*" archive) { archives++; print }
+  NF == 2 && ($2 == source || $2 == "*" source) { sources++; print }
+  END { if (archives != 1 || sources != 1) exit 1 }
+' "$directory/SHA256SUMS" > "$checksum_input"
+(cd "$directory" && shasum -a 256 --check "$checksum_input")
+rm -f "$checksum_input"
+trap - EXIT
 codesign --verify --strict --verbose=2 "$archive"
 validate_ticket "$archive"
 spctl --assess --type open --context context:primary-signature --verbose=2 "$archive"

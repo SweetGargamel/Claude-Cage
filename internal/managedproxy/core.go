@@ -17,6 +17,8 @@ import (
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/sylvinus/agent-vm/internal/host"
 )
 
 // CorePath deliberately never searches PATH or another application's bundle.
@@ -25,8 +27,12 @@ func CorePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, p := range []string{filepath.Join(filepath.Dir(exe), "mihomo"), filepath.Join(filepath.Dir(exe), "..", "proxy-core", "mihomo")} {
-		if st, e := os.Stat(p); e == nil && st.Mode().IsRegular() && st.Mode()&0111 != 0 {
+	name := "mihomo"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	for _, p := range []string{filepath.Join(filepath.Dir(exe), name), filepath.Join(filepath.Dir(exe), "..", "proxy-core", name)} {
+		if st, e := os.Stat(p); e == nil && st.Mode().IsRegular() && (runtime.GOOS == "windows" || st.Mode()&0111 != 0) {
 			return filepath.Clean(p), nil
 		}
 	}
@@ -42,7 +48,7 @@ func Validate(ctx context.Context, profile string, s Store) error {
 		return err
 	}
 	dir := Dir(profile)
-	if err = os.MkdirAll(dir, 0700); err != nil {
+	if err = host.EnsurePrivateDir(dir); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(dir, "validate-*.yaml")
@@ -50,6 +56,10 @@ func Validate(ctx context.Context, profile string, s Store) error {
 		return err
 	}
 	defer os.Remove(f.Name())
+	if err = host.ProtectFile(f.Name()); err != nil {
+		f.Close()
+		return err
+	}
 	if _, err = f.Write(b); err != nil {
 		f.Close()
 		return err
@@ -58,7 +68,7 @@ func Validate(ctx context.Context, profile string, s Store) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, core, "-t", "-d", dir, "-f", f.Name())
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir}
+	cmd.Env = coreEnvironment(dir)
 	if output, e := cmd.CombinedOutput(); e != nil {
 		_ = Write(filepath.Join(dir, "validation.log"), output)
 		return errors.New("代理核心拒绝该配置，请检查节点协议和参数；原配置已保留")
@@ -116,6 +126,9 @@ func label(profile string) string {
 }
 func servicePath(profile string) string { return filepath.Join(Dir(profile), "managed-service.plist") }
 func Stop(profile string) error {
+	if runtime.GOOS == "windows" {
+		return stopWindowsCore(profile)
+	}
 	if _, err := os.Stat(servicePath(profile)); os.IsNotExist(err) {
 		return nil
 	}
@@ -132,6 +145,9 @@ func Stop(profile string) error {
 	return nil
 }
 func Start(ctx context.Context, profile string, s Store) error {
+	if runtime.GOOS == "windows" {
+		return startWindowsCore(ctx, profile, s)
+	}
 	if runtime.GOOS != "darwin" {
 		return errors.New("内置代理当前支持 macOS")
 	}

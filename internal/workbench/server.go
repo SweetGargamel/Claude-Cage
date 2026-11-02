@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/sylvinus/agent-vm/internal/cage"
+	"github.com/sylvinus/agent-vm/internal/host"
 	"github.com/sylvinus/agent-vm/internal/vmname"
 	"io"
 	"io/fs"
@@ -20,7 +21,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -92,7 +92,7 @@ func equalSecret(a, b string) bool {
 }
 func Serve(configPath string) error {
 	profile := filepath.Dir(configPath)
-	if err := os.MkdirAll(profile, 0700); err != nil {
+	if err := host.EnsurePrivateDir(profile); err != nil {
 		return err
 	}
 	lock, err := os.OpenFile(filepath.Join(profile, "control.lock"), os.O_CREATE|os.O_RDWR, 0600)
@@ -100,7 +100,7 @@ func Serve(configPath string) error {
 		return err
 	}
 	defer lock.Close()
-	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err = lockController(lock); err != nil {
 		return errors.New("此配置已有工作台服务正在运行")
 	}
 	exe, err := os.Executable()
@@ -119,7 +119,7 @@ func Serve(configPath string) error {
 		return err
 	}
 	defer listener.Close()
-	s := &Server{profile: profile, configPath: configPath, exe: exe, origin: fmt.Sprintf("http://localhost:%d", port), token: randomToken(), session: randomToken(), preferences: Preferences{Keyboard: "mac"}, terminals: map[string]*terminalSession{}}
+	s := &Server{profile: profile, configPath: configPath, exe: exe, origin: fmt.Sprintf("http://localhost:%d", port), token: randomToken(), session: randomToken(), preferences: Preferences{Keyboard: defaultKeyboard()}, terminals: map[string]*terminalSession{}}
 	s.identity, err = currentController()
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func Serve(configPath string) error {
 		s.networkError = intentErr.Error()
 	}
 	if s.preferences.Keyboard == "" {
-		s.preferences.Keyboard = "mac"
+		s.preferences.Keyboard = defaultKeyboard()
 	}
 	if _, e := os.Stat(configPath); os.IsNotExist(e) {
 		if e = writePrivate(configPath, defaultConfig()); e != nil {

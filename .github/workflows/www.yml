@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify-release:
-    if: (github.event_name == 'release' && !github.event.release.draft) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    if: (github.event_name == 'release' && !github.event.release.draft && !startsWith(github.event.release.tag_name, 'windows-preview-')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
     runs-on: macos-15
     timeout-minutes: 15
     steps:
@@ -40,7 +40,7 @@ jobs:
         run: bash scripts/verify-macos-release.sh "$RUNNER_TEMP/release"
   build:
     needs: verify-release
-    if: always() && !cancelled() && (needs.verify-release.result == 'success' || needs.verify-release.result == 'skipped')
+    if: always() && !cancelled() && !(github.event_name == 'release' && startsWith(github.event.release.tag_name, 'windows-preview-')) && (needs.verify-release.result == 'success' || needs.verify-release.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

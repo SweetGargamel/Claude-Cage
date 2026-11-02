@@ -1,6 +1,7 @@
 package workbench
 
 import (
+	"github.com/sylvinus/agent-vm/internal/host"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -47,8 +48,7 @@ func TestReloadedManualPauseSurvivesAutomaticSubscriptionRefresh(t *testing.T) {
 				t.Fatal("service reload discarded manual pause")
 			}
 			if record == "saved" {
-				stat, err := os.Stat(intentPath)
-				if err != nil || stat.Mode().Perm() != 0600 {
+				if err := host.CheckPrivateFile(intentPath); err != nil {
 					t.Fatal("intent is not private", err)
 				}
 				if reloaded.safety.pauseVersion != original.safety.pauseVersion {

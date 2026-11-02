@@ -3,7 +3,8 @@
 
 // Copied from third_party/lima/cmd/limactl/hostagent.go, which is in package
 // main and cannot be imported. Changed by agent-vm: the package name, and
-// WrapArgsError (in limactl's main.go) is cobra's own error here.
+// WrapArgsError (in limactl's main.go) is cobra's own error here. Cage also
+// receives stop requests through its buffered channel and Windows event.
 // TestHostagentCopy fails when the two drift apart.
 
 package limaembed
@@ -83,8 +84,13 @@ func hostagentAction(cmd *cobra.Command, args []string) error {
 		defer runtime.UnlockOSThread()
 	}
 
-	signalCh := make(chan os.Signal, 1)
+	signalCh := hostagentSignals
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+	stopNotification, err := watchHostagentStop(socket)
+	if err != nil {
+		return err
+	}
+	defer stopNotification()
 
 	stdout := &syncWriter{w: cmd.OutOrStdout()}
 	stderr := &syncWriter{w: cmd.ErrOrStderr()}

@@ -3,6 +3,7 @@ package workbench
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sylvinus/agent-vm/internal/host"
 	"os"
 	"path/filepath"
 	"sync"
@@ -42,8 +43,7 @@ func TestFavoritesPersistenceAndFolders(t *testing.T) {
 	if err != nil || f.Folders[0].Title != "工作" || f.Items[0].URL != "https://example.com/new" {
 		t.Fatalf("persistence: %+v %v", f, err)
 	}
-	info, err := os.Stat(filepath.Join(s.profile, "favorites.json"))
-	if err != nil || info.Mode().Perm() != 0600 {
+	if host.CheckPrivateFile(filepath.Join(s.profile, "favorites.json")) != nil {
 		t.Fatal("favorites file must be private")
 	}
 	f = post(fmt.Sprintf(`{"action":"delete_folder","id":%q}`, folder))

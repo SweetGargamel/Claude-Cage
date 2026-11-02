@@ -3,6 +3,7 @@ package workbench
 import (
 	"context"
 	"encoding/json"
+	"github.com/sylvinus/agent-vm/internal/host"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -175,8 +176,7 @@ func TestKeyboardPreferenceDoesNotRestartOrChangeNetwork(t *testing.T) {
 	if saved.Keyboard != "native" {
 		t.Fatal("preference not persisted")
 	}
-	st, _ := os.Stat(s.configPath)
-	if st.Mode().Perm() != 0600 {
+	if host.CheckPrivateFile(s.configPath) != nil {
 		t.Fatal("profile permissions")
 	}
 }
@@ -223,7 +223,7 @@ func TestRestoreCannotReplaceManagedEndpoint(t *testing.T) {
 }
 
 func TestSSHIsolationOverridesLocalClientSettings(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/ssh"); err != nil {
+	if _, err := os.Stat(sshExecutable()); err != nil {
 		t.Skip("OpenSSH is required")
 	}
 	s := testServer(t)

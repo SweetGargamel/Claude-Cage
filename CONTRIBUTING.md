@@ -1,6 +1,6 @@
 # 参与开发
 
-Cage 的主要开发环境是 Apple Silicon macOS 14+。用户安装预构建 App 即可使用；本页面向需要修改工作台、控制服务或虚拟机底座的贡献者。
+Cage 的桌面开发目标为 Apple Silicon macOS 14+ 与 Windows 10 22H2/11 x64。Windows 的构建工具、安装器和验收范围见 [Windows 指南](docs/windows.md#维护者构建与验收)。用户安装预构建 App 即可使用；本页面向需要修改工作台、控制服务或虚拟机底座的贡献者。
 
 ## 从源码构建
 
@@ -30,7 +30,7 @@ bash scripts/build-app.sh --install
 
 | 目录 | 职责 |
 |---|---|
-| `desktop/` | Swift 原生 Mac 窗口、菜单和系统集成 |
+| `desktop/` | Swift macOS 窗口；`desktop/windows/` 为 WinForms/WebView2 Windows 窗口 |
 | `ui/` | React 工作台、代理管理、设置和网络状态 |
 | `internal/workbench/` | 工作台控制接口、任务、终端和设置 |
 | `internal/cage/` | 强制代理、网络门槛和客机服务 |

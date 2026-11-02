@@ -1,0 +1,81 @@
+name: Windows build and installer
+on:
+  push:
+    paths: ['cmd/**', 'internal/**', 'third_party/**', 'ui/**', 'desktop/windows/**', 'packaging/windows/**', 'scripts/*windows*', 'scripts/collect-app-licenses.mjs', 'go.mod', 'go.sum', 'VERSION', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['cmd/**', 'internal/**', 'third_party/**', 'ui/**', 'desktop/windows/**', 'packaging/windows/**', 'scripts/*windows*', 'scripts/collect-app-licenses.mjs', 'go.mod', 'go.sum', 'VERSION', '.github/workflows/windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cage-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    # Hosted runners are Windows Server. They test the installer and desktop,
+    # not the Windows 10/11 WHPX/VM acceptance matrix.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.403
+      - name: Install NSIS
+        run: |
+          $zip = "$env:RUNNER_TEMP/nsis-3.13.zip"
+          Invoke-WebRequest 'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip' -OutFile $zip
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne 'ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8') { throw 'NSIS checksum mismatch.' }
+          Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+          Add-Content $env:GITHUB_PATH "$env:RUNNER_TEMP/nsis-3.13"
+      - uses: actions/cache@v4
+        with:
+          path: _output/windows-deps
+          key: cage-windows-deps-${{ hashFiles('packaging/windows/dependencies.json') }}
+      - name: Build the Windows application with bundled dependencies
+        run: ./scripts/build-windows.ps1
+      - name: Windows runtime tests
+        run: |
+          dotnet run --project desktop/windows.tests/Cage.Windows.Tests.csproj
+          if ($LASTEXITCODE -ne 0) { throw 'Native updater policy tests failed.' }
+          go test ./internal/workbench ./internal/appupdate ./internal/host ./internal/managedproxy ./internal/env ./internal/paths ./internal/mounts
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Go tests failed.' }
+          go test ./internal/cage -run 'Test(Gate|ProxyRevision|ConfigChange|JobStop|CONNECT|SOCKS|DNS|RejectHostLAN|Credentials|ProxyHostname|SafetyReport|Renew)'
+          if ($LASTEXITCODE -ne 0) { throw 'Cage proxy and safety tests failed.' }
+          go test ./internal/vm -run 'Test(NetworkConfined|WindowsQEMUIdentity)'
+          if ($LASTEXITCODE -ne 0) { throw 'Windows VM confinement tests failed.' }
+          go test github.com/lima-vm/lima/v2/pkg/networks/usernet -run TestNetstackWindowsNativeSocketPaths
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native usernet tests failed.' }
+          go vet ./cmd/cage ./internal/cage ./internal/workbench ./internal/appupdate ./internal/host
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Go vet failed.' }
+      - name: Package unsigned test installer
+        run: ./scripts/package-windows.ps1 -SkipBuild
+      - name: Install, open workbench, upgrade and uninstall
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          ./scripts/test-windows-install.ps1 -Installer "$PWD/_output/releases/$version/windows/Cage-$version-windows-amd64-setup-unsigned.exe"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cage-windows-amd64-${{ matrix.os }}-unsigned
+          path: |
+            _output/releases/*/windows/*
+            ${{ runner.temp }}/cage-smoke-*.json
+          retention-days: 14

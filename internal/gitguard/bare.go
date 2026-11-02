@@ -2,6 +2,8 @@ package gitguard
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -52,7 +54,12 @@ func BareState(ctx context.Context) string {
 	// gitx.Untrusted sets the value on the command line: that scope is not
 	// the user's, the last of the others is.
 	cmd := gitx.Untrusted(ctx, "config", "--show-scope", "--get-all", "safe.bareRepository")
-	cmd.Dir = "/"
+	// Windows needs a volume-qualified directory. The system/user drive root
+	// also keeps this global-config query outside the shared project.
+	cmd.Dir = string(filepath.Separator)
+	if home, err := os.UserHomeDir(); err == nil {
+		cmd.Dir = filepath.VolumeName(home) + string(filepath.Separator)
+	}
 	cmd.WaitDelay = 2 * time.Second
 	out, _ = cmd.Output()
 	value := ""

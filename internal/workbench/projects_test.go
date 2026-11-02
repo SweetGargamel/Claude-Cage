@@ -169,7 +169,7 @@ func TestProjectActionsUseExplicitDirectoryWithoutSwitchingProject(t *testing.T)
 	}
 	session := s.terminals[terminal.ID]
 	defer session.close()
-	if script := session.cmd.Args[len(session.cmd.Args)-1]; !strings.HasPrefix(script, "cd "+shellescape.Quote(a)+" &&") {
+	if script := session.cmd.Args[len(session.cmd.Args)-1]; !strings.HasPrefix(script, "cd "+shellescape.Quote(guestPath(a))+" &&") {
 		t.Fatalf("terminal command opened a different directory: %s", script)
 	}
 	var editorWorkspace string
@@ -185,7 +185,7 @@ func TestProjectActionsUseExplicitDirectoryWithoutSwitchingProject(t *testing.T)
 	})}
 	for _, action := range []string{"editor", "editor-restart"} {
 		w = request(s, "POST", "/api/browser/"+action, s.origin, string(body), true)
-		if w.Code != 200 || editorWorkspace != a || s.workspace() != b {
+		if w.Code != 200 || editorWorkspace != guestPath(a) || s.workspace() != b {
 			t.Fatalf("%s changed the selected project or ignored its directory: %s", action, w.Body.String())
 		}
 	}

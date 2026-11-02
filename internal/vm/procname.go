@@ -26,12 +26,7 @@ func isQEMU(pid int, dir, name string) bool {
 		}
 		args = strings.ReplaceAll(string(b), "\x00", " ")
 	case "windows":
-		out, err := exec.Command("powershell", "-NoProfile", "-Command",
-			"(Get-CimInstance Win32_Process -Filter 'ProcessId="+strconv.Itoa(pid)+"').CommandLine").Output()
-		if err != nil {
-			return false
-		}
-		args = string(out)
+		return isWindowsQEMU(pid, dir, name)
 	default:
 		out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "args=").Output()
 		if err != nil {

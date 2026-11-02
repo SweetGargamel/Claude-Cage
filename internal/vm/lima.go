@@ -524,11 +524,13 @@ func (l *Lima) Stop(ctx context.Context, name string) error {
 	switch {
 	case inst.Status == limatype.StatusRunning:
 		return withLog(io.Discard, func() error {
-			return errors.Join(instance.StopGracefully(ctx, inst, false), reconcile.Reconcile(ctx, ""))
+			return errors.Join(stopInstance(ctx, inst), reconcile.Reconcile(ctx, ""))
 		})
 	case fromLima(inst).Orphaned:
 		return withLog(io.Discard, func() error {
-			instance.StopForcibly(inst)
+			if err := stopOrphanedInstance(ctx, inst); err != nil {
+				return err
+			}
 			return reconcile.Reconcile(ctx, "")
 		})
 	}
@@ -542,7 +544,13 @@ func (l *Lima) Delete(ctx context.Context, name string) error {
 	}
 	return withLog(io.Discard, func() error {
 		if inst.Status == limatype.StatusRunning {
-			_ = instance.StopGracefully(ctx, inst, false)
+			if err := stopInstance(ctx, inst); err != nil {
+				return err
+			}
+		} else if fromLima(inst).Orphaned {
+			if err := stopOrphanedInstance(ctx, inst); err != nil {
+				return err
+			}
 		}
 		return errors.Join(instance.Delete(ctx, inst, true), reconcile.Reconcile(ctx, ""))
 	})

@@ -66,7 +66,7 @@ func (s *Server) ensureProjectShare(path string) error {
 	}
 	ctx, cancel := context.WithTimeout(s.operationContext(), 15*time.Second)
 	defer cancel()
-	quoted := shellescape.Quote(path)
+	quoted := shellescape.Quote(guestPath(path))
 	// Stale FUSE mounts can remain after a control-service restart. Only reconnect
 	// this explicitly authorized path, without changing other projects' mounts.
 	if _, err = s.guest(ctx, "if mountpoint -q "+quoted+"; then fusermount3 -uz "+quoted+"; fi; sudo mkdir -p "+quoted+" && sudo chown \"$(id -u):$(id -g)\" "+quoted); err != nil {
@@ -85,7 +85,7 @@ func (s *Server) ensureProjectShare(path string) error {
 	if err = probe.Close(); err != nil {
 		return err
 	}
-	script := "exec sshfs " + shellescape.Quote(":"+path) + " " + quoted + " -o slave,allow_other,cache=no,nodev,nosuid"
+	script := "exec sshfs " + shellescape.Quote(":"+filepath.ToSlash(path)) + " " + quoted + " -o slave,allow_other,cache=no,nodev,nosuid"
 	cmd := s.sshCommand(context.Background(), "-T", "lima-"+vmname.Name(s.environmentDir()), "--", script)
 	output, err := cmd.StdoutPipe()
 	if err != nil {
@@ -107,7 +107,7 @@ func (s *Server) ensureProjectShare(path string) error {
 		close(share.done)
 	}()
 	for {
-		if _, err = s.guest(ctx, "mountpoint -q "+quoted+" && test \"$(cat "+shellescape.Quote(probe.Name())+")\" = "+shellescape.Quote(challenge)); err == nil {
+		if _, err = s.guest(ctx, "mountpoint -q "+quoted+" && test \"$(cat "+shellescape.Quote(guestPath(probe.Name()))+")\" = "+shellescape.Quote(challenge)); err == nil {
 			break
 		}
 		select {

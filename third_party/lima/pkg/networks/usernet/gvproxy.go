@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/balajiv113/fd"
-	"github.com/containers/gvisor-tap-vsock/pkg/transport"
 	"github.com/containers/gvisor-tap-vsock/pkg/types"
 	"github.com/containers/gvisor-tap-vsock/pkg/virtualnetwork"
 	"github.com/miekg/dns"
@@ -166,7 +165,7 @@ func run(ctx context.Context, g *errgroup.Group, configuration *types.Configurat
 		return err
 	}
 
-	ln, err := transport.Listen(fmt.Sprintf("unix://%s", opts.Endpoint))
+	ln, err := net.Listen("unix", opts.Endpoint)
 	if err != nil {
 		return err
 	}

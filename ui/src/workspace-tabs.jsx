@@ -1,3 +1,4 @@
+import { shortcut } from "./platform.mjs";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -422,7 +423,7 @@ export function WorkspaceTabs({
                 }}
               >
                 <X size={15} />
-                关闭标签<kbd>⌘W</kbd>
+                关闭标签<kbd>{shortcut("⌘W")}</kbd>
               </button>
             </div>
           </>,

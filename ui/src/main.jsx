@@ -1,3 +1,4 @@
+import { shortcut, primaryModifier } from "./platform.mjs";
 import logo from "./logo.png";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -501,7 +502,7 @@ function App() {
   }, [toast]);
   useEffect(() => {
     const key = (event) => {
-      if (!event.metaKey) return;
+      if (!primaryModifier(event)) return;
       const k = event.key.toLowerCase();
       if (document.querySelector("[data-browser-dialog]")) {
         if (k === "w") {
@@ -946,7 +947,7 @@ function App() {
                 <button
                   className="icon-button browser-new-tab"
                   aria-label="新建网页"
-                  title="新建网页 ⌘T"
+                  title={shortcut("新建网页 ⌘T")}
                   disabled={!status.ready || busy}
                   onClick={newPage}
                 >
@@ -1001,7 +1002,7 @@ function App() {
                   <button
                     className="icon-button"
                     aria-label="新建终端"
-                    title="新建终端 ⌘⇧↵"
+                    title={shortcut("新建终端 ⌘⇧↵")}
                     onClick={newTerminalHere}
                     disabled={!running || busy}
                   >
@@ -1011,7 +1012,7 @@ function App() {
                     <button
                       className="icon-button"
                       aria-label="关闭当前标签"
-                      title="关闭当前标签 ⌘W"
+                      title={shortcut("关闭当前标签 ⌘W")}
                       onClick={() => closeTab(current)}
                       disabled={busy}
                     >
@@ -1377,7 +1378,7 @@ function App() {
                       打开项目后，在终端输入 <code>claude</code>
                       ，按提示登录你的账户。
                       <br />
-                      默认工作区和打开的项目与 Mac 共享，编辑和删除文件会同步。
+                      默认工作区和打开的项目与本机共享，编辑和删除文件会同步。
                     </p>
                   )}
                   {status.project_error && (

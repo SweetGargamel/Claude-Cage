@@ -17,6 +17,7 @@ import (
 
 	"al.essio.dev/pkg/shellescape"
 	"github.com/sylvinus/agent-vm/internal/cage"
+	"github.com/sylvinus/agent-vm/internal/paths"
 	"github.com/sylvinus/agent-vm/internal/vmname"
 	"go.yaml.in/yaml/v3"
 )
@@ -143,6 +144,13 @@ func (s *Server) safetyExport(w http.ResponseWriter, r *http.Request) {
 	jsonReply(w, map[string]any{"policy": report.Policy, "created_at": report.CreatedAt, "checks": report.Checks, "scope": "采样与运行时策略检查；不代表平台账号资格或完整虚拟化审计"})
 }
 
+// The probe runs in Linux, while its files are created on the host. Use the
+// same guest path mapping as the VM's mounts for both sides of the boundary.
+func boundaryProbeInput(port int, nonce, privateFile, sharedFile, challenge string) map[string]any {
+	return map[string]any{"stage": "boundary", "control_port": port, "nonce": nonce,
+		"private_file": guestPath(privateFile), "shared_file": guestPath(sharedFile), "challenge": challenge}
+}
+
 func (s *Server) guestObservation(ctx context.Context, input map[string]any) (guestObservation, error) {
 	var observation guestObservation
 	data, err := json.Marshal(input)
@@ -205,7 +213,7 @@ func (s *Server) inspectVMLayout() (bool, bool) {
 	shares := len(spec.Mounts) == 1 && spec.MountType == "reverse-sshfs"
 	if shares {
 		m := spec.Mounts[0]
-		shares = m.Location == workspace && m.MountPoint == workspace && m.Writable && m.SSHFS.Driver == "builtin"
+		shares = paths.Equal(paths.Host(m.Location), paths.Host(workspace)) && m.MountPoint == guestPath(workspace) && m.Writable && m.SSHFS.Driver == "builtin"
 		gitProtected := false
 		for _, name := range m.SSHFS.ReadonlyNames {
 			if name == ".git" {
@@ -394,7 +402,7 @@ func (s *Server) runSafetyCheck() (returned error) {
 	control, _ := url.Parse(s.origin)
 	port, _ := strconv.Atoi(control.Port())
 	s.setMessage("正在验证离线约束、共享文件与系统配置…")
-	boundary, boundaryErr := s.guestObservation(ctx, map[string]any{"stage": "boundary", "control_port": port, "nonce": report.ID, "private_file": private.Name(), "shared_file": shared.Name(), "challenge": challenge})
+	boundary, boundaryErr := s.guestObservation(ctx, boundaryProbeInput(port, report.ID, private.Name(), shared.Name(), challenge))
 	after, err := client.Status(ctx)
 	if err != nil {
 		return err

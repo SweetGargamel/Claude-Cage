@@ -1,3 +1,4 @@
+import { shortcut, isWindows } from "./platform.mjs";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Globe2,
@@ -37,6 +38,7 @@ export function SettingsPanel({
     [section, setSection] = useState(initialSection),
     [probe, setProbe] = useState(null),
     [probing, setProbing] = useState(false),
+    [probeFailed, setProbeFailed] = useState(false),
     [error, setError] = useState(""),
     [jobId, setJobId] = useState(""),
     [submitting, setSubmitting] = useState(false);
@@ -98,6 +100,7 @@ export function SettingsPanel({
   }, [status.job]);
   const check = async () => {
     setProbing(true);
+    setProbeFailed(false);
     setError("");
     try {
       const result = await api("/settings/probe", draft);
@@ -112,6 +115,7 @@ export function SettingsPanel({
         }));
     } catch (e) {
       setError(e.message);
+      setProbeFailed(true);
     } finally {
       setProbing(false);
     }
@@ -276,6 +280,11 @@ export function SettingsPanel({
                   <h3>时区与语言</h3>
                   <p>这些设置作用于 Cage 内的系统、CLI 和浏览器。</p>
                 </div>
+                {!draft.auto_timezone && !draft.auto_language && (
+                  <p className="field-help">
+                    时区和语言将使用下方手动选择的值。静态 IP 或不限制地区时无需位置查询；国家、城市限制仍须检测出口所在地。
+                  </p>
+                )}
                 <label className="toggle-row">
                   <span>
                     <strong>跟随出口 IP 的时区</strong>
@@ -475,7 +484,7 @@ export function SettingsPanel({
                   ))}
                 </div>
                 <p className="field-help">
-                  终端使用 ⌘C / ⌘V 复制粘贴；Ctrl+C 始终用于中断命令。
+                  终端使用 {isWindows ? "Ctrl+Shift+C / Ctrl+Shift+V" : "⌘C / ⌘V"} 复制粘贴；Ctrl+C 始终用于中断命令。
                 </p>
                 <h4>工作台快捷键</h4>
                 <div className="shortcut-list">
@@ -490,7 +499,7 @@ export function SettingsPanel({
                   ].map(([label, key]) => (
                     <div key={label}>
                       <span>{label}</span>
-                      <kbd>{key}</kbd>
+                      <kbd>{shortcut(key)}</kbd>
                     </div>
                   ))}
                 </div>
@@ -559,6 +568,24 @@ export function SettingsPanel({
           {error && (
             <div role="alert" className="error-message">
               {error}
+              {probeFailed && (draft.auto_timezone || draft.auto_language) && (
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => {
+                    setDraft((previous) => ({
+                      ...previous,
+                      auto_timezone: false,
+                      auto_language: false,
+                    }));
+                    setProbeFailed(false);
+                    setError("");
+                    setSection("region");
+                  }}
+                >
+                  手动设置时区和语言
+                </button>
+              )}
             </div>
           )}
         </div>

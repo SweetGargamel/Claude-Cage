@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -16,7 +14,9 @@ import (
 	"time"
 
 	"github.com/sylvinus/agent-vm/internal/cage"
+	"github.com/sylvinus/agent-vm/internal/host"
 	"github.com/sylvinus/agent-vm/internal/mounts"
+	"github.com/sylvinus/agent-vm/internal/paths"
 	"github.com/sylvinus/agent-vm/internal/vmname"
 )
 
@@ -39,6 +39,8 @@ func browserHomeURL(p Preferences) string {
 
 // The environment workspace is separate from the private control profile.
 func environmentWorkspace(profile string) string { return cage.EnvironmentDir(profile) }
+
+func guestPath(path string) string { return paths.Guest(paths.Host(path)) }
 
 func (s *Server) prepareEnvironment() error {
 	path := environmentWorkspace(s.profile)
@@ -106,7 +108,7 @@ func writePrivate(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err = host.EnsurePrivateDir(filepath.Dir(path)); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".cage-write-*")
@@ -114,7 +116,7 @@ func writePrivate(path string, v any) error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if err = f.Chmod(0600); err == nil {
+	if err = host.ProtectFile(f.Name()); err == nil {
 		_, err = f.Write(append(b, '\n'))
 	}
 	if err == nil {
@@ -186,7 +188,7 @@ func validateWorkspace(path, profile string) (string, error) {
 	}
 	if executable, e := os.Executable(); e == nil {
 		if real, e := filepath.EvalSymlinks(executable); e == nil && contains(abs, real) {
-			return "", errors.New("不能共享正在运行的工作台程序所在目录。请将安装版 Cage.app 放在项目外，并重启控制服务后选择此项目。")
+			return "", errors.New("不能共享正在运行的工作台程序所在目录。请将安装版 Cage 放在项目外，并重启控制服务后选择此项目。")
 		}
 	}
 	if mounts.UnderName(filepath.ToSlash(abs), nil) {
@@ -212,6 +214,20 @@ func probeLocation(ctx context.Context, c cage.Config) (Location, error) {
 	return loc, nil
 }
 
+// Manual timezone/language and an IP-only exit rule need no geolocation.
+// The proxy's exit IP is still measured and checked against the saved rule.
+func probeEnvironmentLocation(ctx context.Context, c cage.Config, p Preferences) (Location, error) {
+	policy := c.ExitPolicy.Normalized()
+	if p.AutoTimezone || p.AutoLanguage || (policy.Mode != "static" && policy.Scope != "any") {
+		return probeLocation(ctx, c)
+	}
+	ip, err := cage.ProbeExitIP(ctx, c)
+	if err != nil {
+		return Location{}, err
+	}
+	return Location{IP: ip, CheckedAt: time.Now()}, nil
+}
+
 func (l Location) exitLocation() cage.ExitLocation {
 	return cage.ExitLocation{IP: l.IP, CountryCode: l.CountryCode, Region: l.Region, City: l.City}
 }
@@ -227,34 +243,6 @@ func probeLocationForIP(ctx context.Context, c cage.Config, ip string) (Location
 	}
 	transport := &http.Transport{Proxy: nil, DialContext: e.DialContext, ForceAttemptHTTP2: true}
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect refused") }}
-	req, _ := http.NewRequestWithContext(ctx, "GET", "https://ipwho.is/"+address.String()+"?fields=success,ip,country,country_code,region,region_code,city,timezone.id", nil)
-	r, err := client.Do(req)
-	if err != nil {
-		return Location{}, errors.New("无法经指定代理查询出口；请检查代理是否运行。没有使用直连回退。")
-	}
-	defer r.Body.Close()
-	if r.StatusCode != 200 {
-		return Location{}, fmt.Errorf("出口定位服务返回 HTTP %d；原配置保持不变", r.StatusCode)
-	}
-	var v struct {
-		Success     bool   `json:"success"`
-		IP          string `json:"ip"`
-		Country     string `json:"country"`
-		CountryCode string `json:"country_code"`
-		Region      string `json:"region"`
-		RegionCode  string `json:"region_code"`
-		City        string `json:"city"`
-		Timezone    struct {
-			ID string `json:"id"`
-		} `json:"timezone"`
-	}
-	if json.NewDecoder(io.LimitReader(r.Body, 128<<10)).Decode(&v) != nil || !v.Success || net.ParseIP(v.IP) == nil || !net.ParseIP(v.IP).Equal(address) {
-		return Location{}, errors.New("出口定位服务未返回有效位置；可关闭自动时区后手动设置")
-	}
-	if _, err = time.LoadLocation(v.Timezone.ID); err != nil {
-		return Location{}, errors.New("出口位置未包含有效时区；请手动选择时区")
-	}
-	locale, browser := languageSuggestion(v.CountryCode)
-	return Location{IP: v.IP, Country: v.Country, CountryCode: v.CountryCode, Region: v.Region, RegionCode: v.RegionCode, City: v.City, Timezone: v.Timezone.ID, CheckedAt: time.Now(), SuggestedLocale: locale, SuggestedBrowserLanguage: browser}, nil
+	client := &http.Client{Transport: transport, Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect refused") }}
+	return lookupLocation(ctx, client, address)
 }

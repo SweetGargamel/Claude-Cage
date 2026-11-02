@@ -33,7 +33,7 @@ func inspectHostGit(ctx context.Context) hostGitState {
 	case gitguard.BareOld:
 		view.Message = "本机 Git 版本过旧，请升级到 2.38 或更新版本后重新检查。"
 	default:
-		view.Message = "暂时无法检查本机 Git。请确认 Git 或 Xcode Command Line Tools 安装完整，再重新检查；Cage 不会自动打开安装器。"
+		view.Message = "暂时无法检查本机 Git。请确认 Git 安装完整，再重新检查；Cage 不会自动打开安装器。"
 	}
 	return view
 }
@@ -70,7 +70,7 @@ func (s *Server) enableHostGit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := gitx.Untrusted(ctx, "config", "--global", "--replace-all", "safe.bareRepository", "explicit")
-	cmd.Dir = "/"
+	cmd.Dir = s.profile
 	if err := cmd.Run(); err != nil {
 		http.Error(w, "未能保存 Git 安全设置。请检查全局 Git 配置的写入权限，关闭其他 Git 设置操作后重试。", http.StatusInternalServerError)
 		return

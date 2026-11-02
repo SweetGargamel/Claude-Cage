@@ -87,7 +87,7 @@ func (s *Server) proxyStatus(w http.ResponseWriter, r *http.Request) {
 		_ = managedproxy.API(ctx, s.profile, "GET", "/version", nil, &version)
 	}
 	_, coreErr := managedproxy.CorePath()
-	jsonReply(w, map[string]any{"sources": sources, "selected": p.Selected, "port": p.Port, "running": running, "active": active, "state": state, "state_label": label, "network_open": state == "ready", "core_available": coreErr == nil, "version": version.Version, "revision": p.Revision, "bootstrap_dns": "https://1.1.1.1/dns-query", "udp_blocked": true, "ipv6_blocked": true})
+	jsonReply(w, map[string]any{"sources": sources, "selected": p.Selected, "port": p.Port, "running": running, "active": active, "state": state, "state_label": label, "network_open": state == "ready", "core_available": coreErr == nil, "version": version.Version, "revision": p.Revision, "bootstrap_dns": strings.Join(managedproxy.BootstrapDNSURLs(), "、"), "udp_blocked": true, "ipv6_blocked": true})
 }
 func (s *Server) proxyMutation(w http.ResponseWriter, r *http.Request) {
 	var input proxyInput
@@ -432,7 +432,7 @@ func (s *Server) proxyLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	// Whitelisted lifecycle messages avoid publishing upstream raw log lines,
 	// which can contain subscription secrets, credentials and host paths.
-	lines := []string{"客机公网 UDP、IPv6、ICMP：阻断", "业务 DNS：经选定节点转发", "代理基础设施 DNS：https://1.1.1.1/dns-query（主机网络）"}
+	lines := []string{"客机公网 UDP、IPv6、ICMP：阻断", "业务 DNS：经选定节点转发", "代理基础设施 DNS：" + strings.Join(managedproxy.BootstrapDNSURLs(), "、") + "（主机网络，并行查询）"}
 	if managedproxy.Running(r.Context(), s.profile, p) {
 		lines = append(lines, "内置核心运行中；已读回当前节点选择")
 	} else {

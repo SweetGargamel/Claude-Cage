@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/sylvinus/agent-vm/internal/host"
 	"io"
 	"net/http"
 	"net/url"
@@ -19,16 +20,16 @@ func fixtureRelease(v string, pre bool) release {
 }
 func TestReleaseSelectionPreservesChannelsAndNumericPrereleases(t *testing.T) {
 	rs := []release{fixtureRelease("0.2.0-alpha.9", true), fixtureRelease("0.2.0-alpha.10", true), fixtureRelease("0.1.0", false)}
-	c, err := selectRelease(rs, "0.2.0-alpha.1")
+	c, err := selectPlatformRelease(rs, "0.2.0-alpha.1", "darwin", "arm64")
 	if err != nil || c == nil || c.Version != "0.2.0-alpha.10" {
 		t.Fatalf("selected %#v: %v", c, err)
 	}
 	rs = append(rs, fixtureRelease("0.2.0", false), fixtureRelease("0.3.0-alpha.1", true))
-	c, err = selectRelease(rs, "0.1.0")
+	c, err = selectPlatformRelease(rs, "0.1.0", "darwin", "arm64")
 	if err != nil || c == nil || c.Version != "0.2.0" {
 		t.Fatalf("stable channel %#v: %v", c, err)
 	}
-	if c, err = selectRelease(rs, "0.3.0"); err != nil || c != nil {
+	if c, err = selectPlatformRelease(rs, "0.3.0", "darwin", "arm64"); err != nil || c != nil {
 		t.Fatalf("downgrade: %#v %v", c, err)
 	}
 }
@@ -43,7 +44,7 @@ func TestRejectReleaseAssetOutsideRepositoryOrOversize(t *testing.T) {
 	} {
 		r := fixtureRelease("0.2.0", false)
 		mutate(&r)
-		if c, err := selectRelease([]release{r}, "0.1.0"); err != nil || c != nil {
+		if c, err := selectPlatformRelease([]release{r}, "0.1.0", "darwin", "arm64"); err != nil || c != nil {
 			t.Fatalf("accepted %#v: %v", c, err)
 		}
 	}
@@ -87,8 +88,7 @@ func TestDownloadVerifiesSizeDigestAndPrivateFile(t *testing.T) {
 				if err != nil || e != nil || string(b) != content || received != a.Size {
 					t.Fatalf("download %q %v %v %d", b, err, e, received)
 				}
-				st, _ := os.Stat(path)
-				if st.Mode().Perm() != 0600 {
+				if host.CheckPrivateFile(path) != nil {
 					t.Fatal("public file")
 				}
 			} else {

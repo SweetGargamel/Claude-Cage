@@ -50,6 +50,15 @@ func (e *eventWatch) Write(p []byte) (int, error) {
 	return e.w.Write(p)
 }
 
+// Preserve file flushing through the notification wrapper. Windows file
+// watchers need it to observe newly appended hostagent status events.
+func (e *eventWatch) Sync() error {
+	if s, ok := e.w.(syncer); ok {
+		return s.Sync()
+	}
+	return nil
+}
+
 func (e *eventWatch) event(line []byte) {
 	var ev events.Event
 	if json.Unmarshal(line, &ev) != nil || ev.Status.PortForward == nil {

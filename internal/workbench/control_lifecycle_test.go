@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -138,10 +137,10 @@ func TestPrepareUpdateDoesNotAcceptUnresponsiveLockedController(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err = lockController(f); err != nil {
 		t.Fatal(err)
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer unlockController(f)
 	if _, err := PrepareUpdate(filepath.Join(profile, "config.json"), false); err == nil {
 		t.Fatal("locked offline service accepted as safe to replace")
 	}

@@ -19,6 +19,8 @@ func TestHostagentCopy(t *testing.T) {
 	}
 	want := strings.Replace(string(upstream), "package main", "package limaembed", 1)
 	want = strings.Replace(want, "WrapArgsError(cobra.ExactArgs(1))", "cobra.ExactArgs(1)", 1)
+	want = strings.Replace(want, "signalCh := make(chan os.Signal, 1)", "signalCh := hostagentSignals", 1)
+	want = strings.Replace(want, "signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)", "signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)\n\tstopNotification, err := watchHostagentStop(socket)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer stopNotification()", 1)
 	// Our header: the comment block after the license lines.
 	got := string(ours)
 	start := strings.Index(got, "// Copied from")

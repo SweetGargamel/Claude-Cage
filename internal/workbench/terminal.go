@@ -7,23 +7,28 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
 	"sync"
 	"time"
 
 	"al.essio.dev/pkg/shellescape"
-	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 	"github.com/sylvinus/agent-vm/internal/vmname"
 )
+
+type terminalPTY interface {
+	io.ReadWriteCloser
+	Resize(cols, rows uint16) error
+	Wait() error
+	Kill() error
+}
 
 type terminalSession struct {
 	mu        sync.Mutex
 	id, title string
 	workspace string
 	cmd       *exec.Cmd
-	file      *os.File
+	file      terminalPTY
 	history   []byte
 	closed    bool
 	clients   map[chan []byte]bool
@@ -38,10 +43,8 @@ func (t *terminalSession) close() {
 	t.mu.Lock()
 	if !t.closed {
 		t.closed = true
+		_ = t.file.Kill()
 		_ = t.file.Close()
-		if t.cmd.Process != nil {
-			_ = t.cmd.Process.Kill()
-		}
 	}
 	t.mu.Unlock()
 }
@@ -70,7 +73,7 @@ func (t *terminalSession) read() {
 			break
 		}
 	}
-	_ = t.cmd.Wait()
+	_ = t.file.Wait()
 	t.mu.Lock()
 	t.closed = true
 	for ch := range t.clients {
@@ -122,9 +125,9 @@ func (s *Server) newTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := vmname.Name(s.environmentDir())
-	script := "cd " + shellescape.Quote(workspace) + " && exec env TERM=xterm-256color COLORTERM=truecolor CAGE_WORKBENCH=1 bash -l"
+	script := "cd " + shellescape.Quote(guestPath(workspace)) + " && exec env TERM=xterm-256color COLORTERM=truecolor CAGE_WORKBENCH=1 bash -l"
 	cmd := s.sshCommand(context.Background(), "-tt", "lima-"+name, "--", script)
-	file, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: 100, Rows: 30})
+	file, err := startTerminal(cmd, 100, 30)
 	if err != nil {
 		http.Error(w, "无法创建终端连接", 500)
 		return
@@ -215,7 +218,7 @@ func (s *Server) terminalStream(w http.ResponseWriter, r *http.Request) {
 			_, _ = io.WriteString(t.file, v.Data)
 		case "resize":
 			if v.Cols > 1 && v.Cols < 600 && v.Rows > 1 && v.Rows < 400 {
-				_ = pty.Setsize(t.file, &pty.Winsize{Cols: v.Cols, Rows: v.Rows})
+				_ = t.file.Resize(v.Cols, v.Rows)
 			}
 		}
 	}

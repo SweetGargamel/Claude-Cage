@@ -1,3 +1,4 @@
+import { shortcut } from "./platform.mjs";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -171,7 +172,7 @@ export function BrowserFavorites({ current, ready, onOpen }) {
         <button
           className={`icon-button favorite-star ${favorite ? "saved" : ""}`}
           aria-label={favorite ? "编辑此页收藏" : "收藏此页"}
-          title={favorite ? "编辑此页收藏 ⌘D" : "收藏此页 ⌘D"}
+          title={shortcut(favorite ? "编辑此页收藏 ⌘D" : "收藏此页 ⌘D")}
           disabled={!canSave || !data}
           onClick={addCurrent}
         >
@@ -181,7 +182,7 @@ export function BrowserFavorites({ current, ready, onOpen }) {
           ref={toggle}
           className="icon-button"
           aria-label="收藏夹"
-          title="收藏夹 ⌘⇧O"
+          title={shortcut("收藏夹 ⌘⇧O")}
           aria-expanded={open}
           onClick={() => (open ? setOpen(false) : show())}
         >

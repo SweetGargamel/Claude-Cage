@@ -1,3 +1,4 @@
+import { terminalModifier } from "./platform.mjs";
 import React, {
   useEffect,
   useRef,
@@ -243,7 +244,7 @@ export function TerminalView({ session, visible, onStatus, onControls }) {
       },
     });
     terminal.attachCustomKeyEventHandler((event) => {
-      if (!event.metaKey || event.type !== "keydown") return true;
+      if (!terminalModifier(event) || event.type !== "keydown") return true;
       const key = event.key.toLowerCase();
       if (key === "c") {
         event.preventDefault();
@@ -274,7 +275,7 @@ export function TerminalView({ session, visible, onStatus, onControls }) {
         resize();
         return false;
       }
-      return !event.metaKey;
+      return !terminalModifier(event);
     });
     const observer = new ResizeObserver(resize);
     observer.observe(box.current);

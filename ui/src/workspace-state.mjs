@@ -20,7 +20,7 @@ export function orderedTabs(tabs, saved) {
 }
 
 export const projectName = (path) =>
-  path?.split("/").filter(Boolean).at(-1) || "新项目";
+  path?.split(/[\\/]/).filter(Boolean).at(-1) || "新项目";
 
 export function tabName(tab, saved, project) {
   return (

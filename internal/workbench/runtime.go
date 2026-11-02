@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/sylvinus/agent-vm/internal/cage"
@@ -35,8 +34,9 @@ func (s *Server) sshCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cfg := filepath.Join(s.profile, "state", "lima", name, "ssh.config")
 	base := []string{"-q", "-e", "none", "-F", cfg, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "PermitLocalCommand=no", "-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no", "-o", "ProxyCommand=none", "-o", "ProxyJump=none", "-o", "ConnectTimeout=3", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", "-o", "ForwardAgent=no", "-o", "IdentityAgent=none", "-o", "ForwardX11=no", "-o", "ClearAllForwardings=yes", "-o", "ControlPath=none"}
 	base = append(base, args...)
-	cmd := exec.CommandContext(ctx, "/usr/bin/ssh", base...)
-	cmd.Env = []string{"PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LANG=C", "LC_ALL=C", "TERM=xterm-256color"}
+	cmd := exec.CommandContext(ctx, sshExecutable(), base...)
+	cmd.Env = sshEnvironment()
+	hideCommand(cmd)
 	return cmd
 }
 func (s *Server) guest(ctx context.Context, script string) ([]byte, error) {
@@ -148,6 +148,7 @@ func (s *Server) runCage(args ...string) error {
 	ctx, cancel := context.WithTimeout(s.operationContext(), 30*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.exe, args...)
+	hideCommand(cmd)
 	cmd.Dir = s.environmentDir()
 	if cmd.Dir == "" {
 		cmd.Dir = s.profile
@@ -233,7 +234,7 @@ func (s *Server) startEnvironment(syncTimezone bool) error {
 	auto := preferences.AutoTimezone || preferences.AutoLanguage
 	s.mu.Unlock()
 	s.setMessage("正在验证代理出口…")
-	loc, probeErr := probeLocation(s.operationContext(), cfg)
+	loc, probeErr := probeEnvironmentLocation(s.operationContext(), cfg, preferences)
 	if s.operationContext().Err() != nil {
 		return s.operationContext().Err()
 	}
@@ -373,7 +374,7 @@ func (s *Server) apply(v savedProfile, validate bool) error {
 	changed := old != v.Config || oldPrefs.AutoTimezone != v.Preferences.AutoTimezone || oldPrefs.AutoLanguage != v.Preferences.AutoLanguage
 	if changed && validate && old.RequireManagedProxy(s.profile) == nil {
 		s.setMessage("正在验证新出口，现有环境保持运行…")
-		loc, e := probeLocation(s.operationContext(), v.Config)
+		loc, e := probeEnvironmentLocation(s.operationContext(), v.Config, v.Preferences)
 		if e != nil {
 			if v.Preferences.AutoTimezone || v.Preferences.AutoLanguage || loc.IP == "" {
 				return e
@@ -391,6 +392,9 @@ func (s *Server) apply(v savedProfile, validate bool) error {
 		v.Config.ExitPolicy = v.Config.ExitPolicy.BindMissing(loc.exitLocation())
 		observed := loc.exitLocation()
 		if result, message := v.Config.ExitPolicy.Evaluate(loc.IP, &observed); result != cage.CheckPassed {
+			if result == cage.CheckUnknown && e != nil && !v.Preferences.AutoTimezone && !v.Preferences.AutoLanguage {
+				return errors.New("时区和语言已选择手动设置，但出口规则仍要求确认国家或城市。请重试位置检测，或在“IP 变化规则”中明确选择静态 IP 或不限制地区；原配置保持不变")
+			}
 			return errors.New(message)
 		}
 	}
@@ -540,6 +544,7 @@ func (s *Server) browser(w http.ResponseWriter, r *http.Request) {
 				requestError(w, err)
 				return
 			}
+			input.Workspace = guestPath(workspace)
 		}
 		body, _ = json.Marshal(input)
 	}
@@ -547,6 +552,13 @@ func (s *Server) browser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), 502)
 		return
+	}
+	if action == "tabs" {
+		b, err = s.browserStateForHost(b)
+		if err != nil {
+			http.Error(w, err.Error(), 502)
+			return
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(b)
@@ -596,19 +608,7 @@ func (s *Server) browserEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	flusher := w.(http.Flusher)
 	flusher.Flush()
-	buffer := make([]byte, 16<<10)
-	for {
-		n, e := response.Body.Read(buffer)
-		if n > 0 {
-			if _, err = w.Write(buffer[:n]); err != nil {
-				return
-			}
-			flusher.Flush()
-		}
-		if e != nil {
-			return
-		}
-	}
+	_ = s.writeBrowserEvents(w, response.Body)
 }
 
 func vmAlive(profile, workspace string) bool {
@@ -625,11 +625,6 @@ func vmAlive(profile, workspace string) bool {
 	if json.Unmarshal(b, &record) != nil || record.PID < 1 {
 		return false
 	}
-	p, e := os.FindProcess(record.PID)
-	if e != nil {
-		return false
-	}
-	defer p.Release()
-	return p.Signal(syscall.Signal(0)) == nil
+	return processExists(record.PID)
 }
 func (s *Server) vmRunning() bool { return vmAlive(s.profile, s.environmentDir()) }

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/sylvinus/agent-vm/internal/managedproxy"
 	"github.com/sylvinus/agent-vm/internal/version"
@@ -101,7 +100,7 @@ func controllerHasVM(profile string) bool {
 		if json.Unmarshal(b, &record) != nil || record.PID <= 0 {
 			return true
 		}
-		if err := syscall.Kill(record.PID, 0); err == nil || err != syscall.ESRCH {
+		if processExists(record.PID) {
 			return true
 		}
 	}

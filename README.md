@@ -46,7 +46,9 @@ Claude Cage 是一个轻量 Linux 虚拟机，把 Linux 终端、浏览器和文
 
 ## 下载与安装
 
-首版面向 **Apple Silicon Mac（M 系列芯片），macOS 14 或更新版本**。Intel Mac、Windows 和 Linux 尚不作为 Cage 桌面版的受支持平台。
+首版面向 **Apple Silicon Mac（M 系列芯片），macOS 14 或更新版本**。Windows 10 22H2 / Windows 11 x64 的桌面实现与安装器已加入源码，当前处于开发验收阶段，见 [Windows 安装与更新](docs/windows.md)。Intel Mac、Windows ARM64 和 Linux 尚不作为 Cage 桌面版的受支持平台。
+
+[Windows 未签名预览版](https://github.com/Lee-xeo/Claude-Cage/releases/tag/windows-preview-20261102)已完成 Windows 11 Pro 24H2 x64 实机验收，可手动下载安装；Windows 10 尚未实机验收。预览版不通过应用内更新自动安装，安装器和源码摘要随 Release 提供。
 
 1. 打开 [GitHub Releases](https://github.com/Lee-xeo/Claude-Cage/releases)，选择发布条目中的 Apple Silicon `.dmg` 安装包。
 2. 打开安装包，将 **Cage** 拖入 **Applications（应用程序）**，再从“应用程序”启动。
@@ -70,11 +72,11 @@ Claude Cage 是一个轻量 Linux 虚拟机，把 Linux 终端、浏览器和文
 
 ### 3. 打开项目，运行 Claude
 
-点击“打开项目”选择 Mac 上的文件夹，再新建终端，输入 `claude`，在 Cage 浏览器中完成自己的账户授权。也可以先使用默认工作区，无需提前准备项目。完整步骤见[开始使用](docs/getting-started.md)。
+点击“打开项目”选择本机上的文件夹，再新建终端，输入 `claude`，在 Cage 浏览器中完成自己的账户授权。也可以先使用默认工作区，无需提前准备项目。完整步骤见[开始使用](docs/getting-started.md)。
 
 ## 使用前了解这些边界
 
-- 共享项目中的修改和删除会直接影响 Mac 上的文件。请使用版本控制或备份；`.git` 等元数据默认只读，Git 提交在 Mac 上完成。
+- 共享项目中的修改和删除会直接影响本机上的文件。请使用版本控制或备份；`.git` 等元数据默认只读，Git 提交在主机上完成。
 - 所有项目共用一个 Cage 环境，也共用其中的工具、账户与 Linux 文件系统。项目之间没有独立隔离。
 - 当前允许客机通过代理访问公网 IPv4 TCP，DNS 通过同一代理发送；公网 UDP、IPv6、ICMP，以及客机主动访问主机和局域网的连接受到阻断。依赖这些能力的工具可能无法使用。
 - 网络检查展示当前配置和采样证据，无法保证账户不会受到平台限制，也不能代替完整的虚拟化安全审计。

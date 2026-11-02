@@ -11,9 +11,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
+	"github.com/sylvinus/agent-vm/internal/host"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -57,6 +59,9 @@ func Token() string {
 func Dir(profile string) string { return filepath.Join(profile, "proxy") }
 func Socket(profile string) string {
 	h := sha256.Sum256([]byte(filepath.Clean(profile)))
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.TempDir(), fmt.Sprintf("cage-proxy-%x", h[:8]), "control.sock")
+	}
 	return filepath.Join("/tmp", fmt.Sprintf("cage-proxy-%d-%x", os.Getuid(), h[:8]), "control.sock")
 }
 func Load(profile string) (Store, error) {
@@ -79,7 +84,7 @@ func Load(profile string) (Store, error) {
 	return s, nil
 }
 func Write(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := host.EnsurePrivateDir(filepath.Dir(path)); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".proxy-*")
@@ -87,7 +92,7 @@ func Write(path string, data []byte) error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if err = f.Chmod(0600); err == nil {
+	if err = host.ProtectFile(f.Name()); err == nil {
 		_, err = f.Write(data)
 	}
 	if err == nil {
@@ -270,7 +275,7 @@ func (s Store) Runtime(profile string) ([]byte, error) {
 	}
 	// Infrastructure DNS bootstraps only the core's server domains. Guest DNS
 	// remains behind Cage Egress, and there is no host-system resolver fallback.
-	dns := map[string]any{"enable": true, "ipv6": false, "use-hosts": false, "use-system-hosts": false, "default-nameserver": []string{"https://1.1.1.1/dns-query"}, "proxy-server-nameserver": []string{"https://1.1.1.1/dns-query"}, "nameserver": []string{"https://1.1.1.1/dns-query#" + Group}}
+	dns := map[string]any{"enable": true, "ipv6": false, "use-hosts": false, "use-system-hosts": false, "default-nameserver": BootstrapDNSURLs(), "proxy-server-nameserver": BootstrapDNSURLs(), "nameserver": []string{"https://1.1.1.1/dns-query#" + Group}}
 	config := map[string]any{"mixed-port": s.Port, "bind-address": "127.0.0.1", "allow-lan": false, "authentication": []string{"cage:" + s.Auth}, "skip-auth-prefixes": []string{}, "mode": "rule", "ipv6": false, "log-level": "warning", "find-process-mode": "off", "external-controller-unix": Socket(profile), "tun": map[string]any{"enable": false}, "dns": dns, "geo-auto-update": false, "profile": map[string]any{"store-selected": false}, "proxies": proxies, "proxy-groups": []any{map[string]any{"name": Group, "type": "select", "proxies": []string{s.Selected}}}, "rules": []string{"MATCH," + Group}}
 	return yaml.Marshal(config)
 }

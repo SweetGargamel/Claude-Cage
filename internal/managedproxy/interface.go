@@ -16,6 +16,9 @@ import (
 // PhysicalInterface uses the system's preferred reachable IPv4 hardware port.
 // A route through utun is not a physical uplink, even when it is the default.
 func PhysicalInterface(ctx context.Context) (string, error) {
+	if runtime.GOOS == "windows" {
+		return windowsPhysicalInterface(ctx)
+	}
 	if runtime.GOOS != "darwin" {
 		return "", errors.New("物理网卡识别当前支持 macOS")
 	}

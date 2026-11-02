@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/sylvinus/agent-vm/internal/cage"
+	"github.com/sylvinus/agent-vm/internal/host"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -13,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -35,7 +35,14 @@ type controllerClient struct {
 var errControllerUnavailable = errors.New("control service is unavailable")
 
 func connectController(profile string) (*controllerClient, error) {
-	b, err := os.ReadFile(filepath.Join(profile, "control.json"))
+	path := filepath.Join(profile, "control.json")
+	if err := host.CheckPrivateFile(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, errControllerUnavailable
+		}
+		return nil, err
+	}
+	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, errControllerUnavailable
 	}
@@ -168,10 +175,10 @@ func PrepareUpdate(configPath string, stop bool) (DesktopResult, error) {
 		lock, lockErr := os.OpenFile(filepath.Join(filepath.Dir(configPath), "control.lock"), os.O_RDWR, 0600)
 		if lockErr == nil {
 			defer lock.Close()
-			if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+			if lockController(lock) != nil {
 				return DesktopResult{}, errors.New("后台暂时无法连接且尚未退出，请恢复连接后重试更新。")
 			}
-			defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+			defer unlockController(lock)
 		} else if !os.IsNotExist(lockErr) {
 			return DesktopResult{}, lockErr
 		}
@@ -284,7 +291,7 @@ func (c *controllerClient) stopAndHandoff() error {
 		if err != nil || status != http.StatusOK || final.VMRunning == nil || *final.VMRunning || final.Job.ID != requested.ID || final.Job.Running || final.Job.Error != "" || controllerHasVM(c.profile) {
 			return errors.New("停止后又有环境工作，未终止旧后台；请保存停止后重试。")
 		}
-		if err = syscall.Kill(owner.PID, syscall.SIGTERM); err != nil {
+		if err = terminateLegacy(owner.PID); err != nil {
 			return errors.New("旧后台未能退出，未替换应用。")
 		}
 	} else {
@@ -305,8 +312,8 @@ func (c *controllerClient) waitForExit() error {
 	}
 	defer f.Close()
 	for i := 0; i < 100; i++ {
-		if syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) == nil {
-			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		if lockController(f) == nil {
+			_ = unlockController(f)
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -315,7 +322,7 @@ func (c *controllerClient) waitForExit() error {
 }
 func startController(configPath string) error {
 	profile := filepath.Dir(configPath)
-	if err := os.MkdirAll(profile, 0700); err != nil {
+	if err := host.EnsurePrivateDir(profile); err != nil {
 		return err
 	}
 	exe, err := os.Executable()
@@ -331,7 +338,7 @@ func startController(configPath string) error {
 	cmd.Dir = profile
 	cmd.Env = append(os.Environ(), cage.ConfigEnv+"="+configPath)
 	cmd.Stdout, cmd.Stderr = log, log
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	detachController(cmd)
 	if err = cmd.Start(); err != nil {
 		return err
 	}

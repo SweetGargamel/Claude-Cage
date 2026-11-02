@@ -1,0 +1,16 @@
+{
+  "releaseTag": "windows-preview-20261102",
+  "applicationVersion": "0.1.0-alpha.1",
+  "installer": "Cage-0.1.0-alpha.1-windows-amd64-setup-unsigned.exe",
+  "installerSHA256": "15d0e4bc5a7c75c9a83603f69dcf82aa34ca80e7beb56f13b2c883c4f990d572",
+  "buildBaseCommit": "8c76abda8806e2966d90bff295b1101da5613dbc",
+  "sourceInputFingerprint": "c877e5d108d14c8fe1e8b12e52af36c77ccb4051e570fe0da651b7c143e7aacd",
+  "embeddedAssetsFingerprint": "035138ed773b2eb792917a4b20e7ba1ad7333337a95944f08e9bb8984c671582",
+  "verifiedSourceFiles": 1428,
+  "verifiedGeneratedFiles": 201,
+  "signed": false,
+  "testedSystem": "Windows 11 Pro 24H2 x64 build 26100",
+  "windows10Tested": false,
+  "automaticUpdate": false,
+  "notes": "Source inputs match the tested installer; release documentation and workflow guards are added to the publication snapshot."
+}

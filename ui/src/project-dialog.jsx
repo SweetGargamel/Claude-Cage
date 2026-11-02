@@ -1,3 +1,4 @@
+import { isWindows } from "./platform.mjs";
 import React, { useEffect, useState } from "react";
 import { FolderOpen, LoaderCircle } from "lucide-react";
 import { api, native, nativeAvailable } from "./api";
@@ -99,7 +100,7 @@ export function ProjectDialog({
               setPath(event.target.value);
               setError("");
             }}
-            placeholder="/Users/你的名字/Projects/my-project"
+            placeholder={isWindows ? "C:/Users/你的名字/Projects/my-project" : "/Users/你的名字/Projects/my-project"}
             disabled={busy}
             spellCheck="false"
             autoComplete="off"

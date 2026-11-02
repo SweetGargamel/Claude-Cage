@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sylvinus/agent-vm/internal/host"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -140,9 +141,8 @@ func TestImportCompilesOnlyOwnedNetworkBoundary(t *testing.T) {
 	if err = s.Save(profile); err != nil {
 		t.Fatal(err)
 	}
-	info, _ := os.Stat(filepath.Join(Dir(profile), "sources.json"))
-	if info.Mode().Perm() != 0600 {
-		t.Fatal("source credentials not private")
+	if err := host.CheckPrivateFile(filepath.Join(Dir(profile), "sources.json")); err != nil {
+		t.Fatalf("source credentials not private: %v", err)
 	}
 	loaded, err := Load(profile)
 	if err != nil || loaded.Endpoint() != s.Endpoint() {

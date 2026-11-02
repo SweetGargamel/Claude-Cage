@@ -1,3 +1,4 @@
+import { shortcut } from "./platform.mjs";
 import React, { useEffect, useState } from "react";
 import {
   ArrowUpRight,
@@ -91,7 +92,7 @@ export function WorkspaceSidebar({
           disabled={busy || !running}
         >
           <FolderOpen size={17} />
-          打开项目<kbd>⌘O</kbd>
+          打开项目<kbd>{shortcut("⌘O")}</kbd>
         </button>
         <button
           className="sidebar-link"
@@ -212,7 +213,7 @@ export function WorkspaceSidebar({
         <div className="sidebar-footer-actions">
           <button className="sidebar-link" onClick={onSettings}>
             <Settings2 size={17} />
-            设置<kbd>⌘,</kbd>
+            设置<kbd>{shortcut("⌘,")}</kbd>
           </button>
           {updateAction}
         </div>

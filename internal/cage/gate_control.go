@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/sylvinus/agent-vm/internal/host"
 )
 
 const gateRecordName = "cage-gate.json"
@@ -36,8 +38,12 @@ type gateCommand struct {
 // StartGateControl publishes an authenticated Unix endpoint in host-private
 // storage. It creates no TCP listener or guest-visible control credential.
 func StartGateControl(configPath, instanceDir string, gate *EgressGate) (func(), error) {
-	dir, err := os.MkdirTemp("/tmp", "cage-gate-")
+	dir, err := os.MkdirTemp(gateTempDir(), "cage-gate-")
 	if err != nil {
+		return nil, err
+	}
+	if err = host.EnsurePrivateDir(dir); err != nil {
+		os.RemoveAll(dir)
 		return nil, err
 	}
 	socket := filepath.Join(dir, "control.sock")
@@ -46,7 +52,7 @@ func StartGateControl(configPath, instanceDir string, gate *EgressGate) (func(),
 		os.RemoveAll(dir)
 		return nil, err
 	}
-	if err = os.Chmod(socket, 0600); err != nil {
+	if err = host.ProtectFile(socket); err != nil {
 		listener.Close()
 		os.RemoveAll(dir)
 		return nil, err
@@ -66,6 +72,12 @@ func StartGateControl(configPath, instanceDir string, gate *EgressGate) (func(),
 		return nil, err
 	}
 	defer os.Remove(temporary.Name())
+	if err = host.ProtectFile(temporary.Name()); err != nil {
+		temporary.Close()
+		listener.Close()
+		os.RemoveAll(dir)
+		return nil, err
+	}
 	_, err = temporary.Write(data)
 	if closeErr := temporary.Close(); err == nil {
 		err = closeErr
@@ -178,8 +190,7 @@ type GateClient struct{ record gateRecord }
 
 func OpenGateClient(instanceDir string) (*GateClient, error) {
 	path := filepath.Join(instanceDir, gateRecordName)
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+	if err := host.CheckPrivateFile(path); err != nil {
 		return nil, errors.New("网络门槛控制记录不可用，请停止并重启环境")
 	}
 	data, err := os.ReadFile(path)

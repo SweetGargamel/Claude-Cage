@@ -15,11 +15,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/sylvinus/agent-vm/internal/cage"
+	"github.com/sylvinus/agent-vm/internal/host"
 	"github.com/sylvinus/agent-vm/internal/managedproxy"
 	"github.com/sylvinus/agent-vm/internal/version"
 	"golang.org/x/mod/semver"
@@ -106,15 +108,13 @@ func Run(configPath string, args []string, output io.Writer) int {
 		return fail(err)
 	}
 	directory := filepath.Join(filepath.Dir(configPath), "updates")
-	if err = os.MkdirAll(directory, 0700); err != nil {
+	if err = host.EnsurePrivateDir(directory); err != nil {
 		return fail(errors.New("无法创建私有更新目录"))
 	}
 	if st, e := os.Lstat(directory); e != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
 		return fail(errors.New("更新目录必须是私有普通目录"))
 	}
-	if err = os.Chmod(directory, 0700); err != nil {
-		return fail(errors.New("无法保护更新目录"))
-	}
+
 	job, err := os.MkdirTemp(directory, "download-")
 	if err != nil {
 		return fail(errors.New("无法创建更新下载任务"))
@@ -125,7 +125,14 @@ func Run(configPath string, args []string, output io.Writer) int {
 			_ = os.RemoveAll(job)
 		}
 	}()
-	archive := filepath.Join(job, "Cage.dmg")
+	if err = host.EnsurePrivateDir(job); err != nil {
+		return fail(err)
+	}
+	localName := "Cage.dmg"
+	if runtime.GOOS == "windows" {
+		localName = "Cage-setup.exe"
+	}
+	archive := filepath.Join(job, localName)
 	state.Phase, state.Message, state.TotalBytes = "downloading", "正在下载更新", c.Archive.Size
 	emit()
 	err = download(ctx, client, c.Archive, digest, archive, func(n int64) {
@@ -249,6 +256,24 @@ func findRelease(ctx context.Context, client *http.Client, current string) (*can
 }
 
 func selectRelease(releases []release, current string) (*candidate, error) {
+	return selectPlatformRelease(releases, current, runtime.GOOS, runtime.GOARCH)
+}
+
+func archiveName(version, goos, goarch string) (string, error) {
+	switch {
+	case goos == "darwin" && goarch == "arm64":
+		return "Cage-" + version + "-macos-arm64.dmg", nil
+	case goos == "windows" && goarch == "amd64":
+		return "Cage-" + version + "-windows-amd64-setup.exe", nil
+	default:
+		return "", errors.New("此平台尚无 Cage 应用内更新发行包")
+	}
+}
+
+func selectPlatformRelease(releases []release, current, goos, goarch string) (*candidate, error) {
+	if _, err := archiveName(current, goos, goarch); err != nil {
+		return nil, err
+	}
 	currentTag := "v" + current
 	if !semver.IsValid(currentTag) || semver.Canonical(currentTag) != currentTag {
 		return nil, errors.New("当前应用版本无效，无法安全比较更新")
@@ -267,11 +292,12 @@ func selectRelease(releases []release, current string) (*candidate, error) {
 			continue
 		}
 		c := candidate{Version: v}
+		name, _ := archiveName(v, goos, goarch)
 		for _, a := range r.Assets {
 			if a.State != "uploaded" {
 				continue
 			}
-			if a.Name == "Cage-"+v+"-macos-arm64.dmg" && a.Size > 0 && a.Size <= maxArchive {
+			if a.Name == name && a.Size > 0 && a.Size <= maxArchive {
 				c.Archive = a
 			}
 			if a.Name == "SHA256SUMS" && a.Size > 0 && a.Size <= 64<<10 {
@@ -373,6 +399,9 @@ func download(ctx context.Context, client *http.Client, a asset, digest, path st
 			os.Remove(path)
 		}
 	}()
+	if err := host.ProtectFile(path); err != nil {
+		return errors.New("无法保护更新文件")
+	}
 	hash := sha256.New()
 	w := &progressWriter{writer: io.MultiWriter(f, hash), notify: progress}
 	n, err := io.Copy(w, io.LimitReader(resp.Body, a.Size+1))
